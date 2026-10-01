@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Sentinel.Api.Data;
 using Sentinel.Shared;
@@ -35,8 +36,10 @@ public static class Claims
     public const string SecurityStamp = "sentinel:stamp";
 }
 
-public sealed class TokenService(JwtOptions options)
+public sealed class TokenService(IOptions<JwtOptions> jwtOptions)
 {
+    private readonly JwtOptions options = jwtOptions.Value;
+
     public LoginResponse CreateToken(User user)
     {
         var expires = DateTime.UtcNow.AddMinutes(options.LifetimeMinutes);
@@ -62,19 +65,23 @@ public sealed class TokenService(JwtOptions options)
 
 public static class AuthSetup
 {
-    public static IServiceCollection AddSentinelAuth(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddSentinelAuth(this IServiceCollection services)
     {
-        var jwt = config.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
-        if (Encoding.UTF8.GetByteCount(jwt.Key) < 32)
-            throw new InvalidOperationException("Jwt:Key must be set to a random secret of at least 32 bytes (env var Jwt__Key).");
+        // Bound lazily (not read while registering services) so every configuration source is honoured.
+        services.AddOptions<JwtOptions>()
+            .BindConfiguration(JwtOptions.Section)
+            .Validate(o => Encoding.UTF8.GetByteCount(o.Key) >= 32,
+                "Jwt:Key must be set to a random secret of at least 32 bytes (env var Jwt__Key).")
+            .ValidateOnStart();
 
-        services.AddSingleton(jwt);
         services.AddSingleton<TokenService>();
         services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(o =>
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+            .Configure<IOptions<JwtOptions>>((o, jwtOptions) =>
             {
+                var jwt = jwtOptions.Value;
                 o.MapInboundClaims = false;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
