@@ -10,8 +10,8 @@ jobs:
     name: Build, test & dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -22,7 +22,8 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --verbosity normal
+        # The GitHub Actions logger turns failed tests into annotations on the run and on pull requests.
+        run: dotnet test --no-build -c Release --logger GitHubActions --logger "console;verbosity=normal"
 
       - name: Fail on known-vulnerable NuGet packages
         run: |
@@ -34,7 +35,7 @@ jobs:
     needs: build-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build image
         run: docker build -t zerotrust-sentinel:latest .
