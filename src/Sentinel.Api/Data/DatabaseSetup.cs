@@ -16,16 +16,18 @@ public sealed class SeedOptions
 
 public static class DatabaseSetup
 {
-    public static IServiceCollection AddSentinelDatabase(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddSentinelDatabase(this IServiceCollection services)
     {
-        var provider = config["Database:Provider"] ?? "Postgres";
-        var connection = config.GetConnectionString("Sentinel")
-            ?? throw new InvalidOperationException("ConnectionStrings:Sentinel is not configured.");
-
-        services.AddDbContext<SentinelDbContext>(o =>
+        services.AddDbContext<SentinelDbContext>((sp, o) =>
         {
-            if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase)) o.UseSqlite(connection);
-            else o.UseNpgsql(connection);
+            var config = sp.GetRequiredService<IConfiguration>();
+            var connection = config.GetConnectionString("Sentinel")
+                ?? throw new InvalidOperationException("ConnectionStrings:Sentinel is not configured.");
+
+            if ((config["Database:Provider"] ?? "Postgres").Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+                o.UseSqlite(connection);
+            else
+                o.UseNpgsql(connection);
         });
         return services;
     }

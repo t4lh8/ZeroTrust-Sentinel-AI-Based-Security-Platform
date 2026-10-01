@@ -7,21 +7,22 @@ using Sentinel.Api.Monitoring;
 using Sentinel.Api.Security;
 
 var builder = WebApplication.CreateBuilder(args);
-var config = builder.Configuration;
 
-var detection = config.GetSection(DetectionOptions.Section).Get<DetectionOptions>() ?? new DetectionOptions();
-var demo = config.GetSection(DemoOptions.Section).Get<DemoOptions>() ?? new DemoOptions();
+// Settings are read when services are first resolved, not here, so every configuration source
+// (appsettings, environment variables, test hosts) is taken into account.
+static T Settings<T>(IServiceProvider sp, string section) where T : new() =>
+    sp.GetRequiredService<IConfiguration>().GetSection(section).Get<T>() ?? new T();
 
-builder.Services.AddSentinelDatabase(config);
-builder.Services.AddSentinelAuth(config);
+builder.Services.AddSentinelDatabase();
+builder.Services.AddSentinelAuth();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuditLogger>();
 builder.Services.AddSignalR();
 builder.Services.AddProblemDetails();
 
 // Detection pipeline: queue -> processor (rules + Isolation Forest) -> database + SignalR.
-builder.Services.AddSingleton(detection);
-builder.Services.AddSingleton(demo);
+builder.Services.AddSingleton(sp => Settings<DetectionOptions>(sp, DetectionOptions.Section));
+builder.Services.AddSingleton(sp => Settings<DemoOptions>(sp, DemoOptions.Section));
 builder.Services.AddSingleton<AnomalyModels>();
 builder.Services.AddSingleton<ThreatDetector>();
 builder.Services.AddSingleton<EventQueue>();
@@ -33,20 +34,25 @@ builder.Services.AddHostedService<TrafficSimulator>();
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    var loginLimit = config.GetValue("RateLimit:LoginPerMinute", 5);
-    var apiLimit = config.GetValue("RateLimit:ApiPerMinute", 120);
+    static int Limit(HttpContext ctx, string key, int fallback) =>
+        ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue(key, fallback);
 
     // Login: a few attempts per minute per IP, which makes online password guessing impractical.
     o.AddPolicy(AuthEndpoints.LoginRateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.ClientIp(),
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = loginLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Limit(ctx, "RateLimit:LoginPerMinute", 5),
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
 
     // Everything under /api: a token bucket per IP absorbs normal bursts but stops floods and scrapers.
     o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         ctx.Request.Path.StartsWithSegments("/api")
             ? RateLimitPartition.GetTokenBucketLimiter(ctx.ClientIp(), _ => new TokenBucketRateLimiterOptions
             {
-                TokenLimit = apiLimit,
-                TokensPerPeriod = apiLimit,
+                TokenLimit = Limit(ctx, "RateLimit:ApiPerMinute", 120),
+                TokensPerPeriod = Limit(ctx, "RateLimit:ApiPerMinute", 120),
                 ReplenishmentPeriod = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             })
@@ -77,7 +83,7 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
 app.MapAuthEndpoints();
 app.MapDashboardEndpoints();
-app.MapHoneypotEndpoints(detection);
+app.MapHoneypotEndpoints(app.Services.GetRequiredService<DetectionOptions>());
 app.MapHub<AlertHub>("/hubs/alerts");
 
 // The Blazor WebAssembly dashboard: its files are public, the data behind it is not.
