@@ -60,7 +60,7 @@ public sealed class AnomalyModel(string name, string[] featureNames, double thre
         Enumerable.Range(0, features.Length).Max(f => Z(s, features, f));
 
     /// <summary>The features that deviate most from what the model saw in training, for the alert text.</summary>
-    public IReadOnlyList<string> Explain(double[] features, int top = 3)
+    public IReadOnlyList<string> Explain(double[] features, int top = 4)
     {
         var s = _snapshot;
         if (s is null) return [];
