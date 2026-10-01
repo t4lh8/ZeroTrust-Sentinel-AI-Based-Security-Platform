@@ -62,7 +62,9 @@ public sealed class ActivityTracker
 
     public double[] TrafficFeatures(DateTime now, string ip)
     {
-        var minute = Recent(_byIp, ip, now, ShortWindow).ToList();
+        // Login attempts belong to the login model. Counting a mistyped password (401) here as well
+        // would make an ordinary typo look like an attack on the API.
+        var minute = Recent(_byIp, ip, now, ShortWindow).Where(h => !IsLoginType(h.Type)).ToList();
         var errors = minute.Count(h => h.Status >= 400);
         return
         [
@@ -70,9 +72,11 @@ public sealed class ActivityTracker
             minute.Select(h => h.Path).Distinct().Count(),
             minute.Count == 0 ? 0 : Math.Round((double)errors / minute.Count, 3),
             minute.Count(h => h.Status == 404),
-            Count(_byIp, ip, now, LongWindow, h => h.Status is 401 or 403),
+            Count(_byIp, ip, now, LongWindow, h => !IsLoginType(h.Type) && h.Status is 401 or 403),
         ];
     }
+
+    private static bool IsLoginType(EventType type) => type is EventType.LoginSuccess or EventType.LoginFailure;
 
     public int CountForIp(string ip, DateTime now, TimeSpan window, Func<EventType, int, bool> match) =>
         Count(_byIp, ip, now, window, h => match(h.Type, h.Status));
