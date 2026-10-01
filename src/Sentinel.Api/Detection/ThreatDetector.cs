@@ -134,9 +134,12 @@ public sealed class ThreatDetector(DetectionOptions options, AnomalyModels model
             ? " A successful login that looks this different from the user's history may indicate account takeover."
             : "";
 
+        // Cooldown per event type: alerts on failed attempts must not silence the more serious
+        // alert when the attacker finally logs in successfully.
         Raise(alerts, ev, "AI anomaly", severity, Math.Round(score * 100, 1), TimeSpan.FromMinutes(10), title,
             $"The {model.Name.ToLowerInvariant()} model (Isolation Forest) scored this event {score:0.00} " +
-            $"(threshold {model.Threshold:0.00}).{why}{context}");
+            $"(threshold {model.Threshold:0.00}).{why}{context}",
+            key: $"{ev.SourceIp}|{ev.Type}");
     }
 
     private void Raise(List<Alert> alerts, SecurityEvent ev, string category, Severity severity, double risk,
