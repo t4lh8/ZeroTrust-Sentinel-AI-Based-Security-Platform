@@ -1,0 +1,66 @@
+@* Lightweight SVG chart: total events (area), suspicious events (line) and alerts (red markers) per 5 minutes. *@
+
+<svg viewBox="0 0 @Width @Height" width="100%" preserveAspectRatio="none" style="display:block; height:@(Height)px">
+    <defs>
+        <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#4f8cff" stop-opacity="0.45" />
+            <stop offset="100%" stop-color="#4f8cff" stop-opacity="0" />
+        </linearGradient>
+    </defs>
+
+    @for (var i = 1; i <= 3; i++)
+    {
+        var y = Pad + (Height - 2 * Pad - Axis) * i / 4.0;
+        <line x1="0" x2="@Width" y1="@N(y)" y2="@N(y)" stroke="rgba(255,255,255,0.05)" />
+    }
+
+    @if (Buckets.Count > 1)
+    {
+        <path d="@AreaPath()" fill="url(#area)" />
+        <path d="@LinePath(b => b.Events)" fill="none" stroke="#4f8cff" stroke-width="2" vector-effect="non-scaling-stroke" />
+        <path d="@LinePath(b => b.Failures)" fill="none" stroke="#ff8a3d" stroke-width="2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
+
+        @for (var i = 0; i < Buckets.Count; i++)
+        {
+            if (Buckets[i].Alerts > 0)
+            {
+                <circle cx="@N(X(i))" cy="@(Pad + 4)" r="@Math.Min(4 + Buckets[i].Alerts, 10)" fill="#ff4d6d" fill-opacity="0.85">
+                    <title>@Buckets[i].Alerts alert(s)</title>
+                </circle>
+            }
+            if (i % 2 == 0 || i == Buckets.Count - 1)
+            {
+                <g><text x="@N(X(i))" y="@(Height - 4)" fill="#8b9bbf" font-size="11" text-anchor="middle">@Buckets[i].BucketStartUtc.ToLocalTime().ToString("HH:mm")</text></g>
+            }
+        }
+    }
+</svg>
+<div class="d-flex gap-4 mt-2" style="font-size: 0.78rem; color: #8b9bbf">
+    <span><span style="color:#4f8cff">━</span> All events</span>
+    <span><span style="color:#ff8a3d">┅</span> Failed / blocked / honeypot</span>
+    <span><span style="color:#ff4d6d">●</span> Alerts</span>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TimeBucketDto> Buckets { get; set; } = [];
+
+    private const int Width = 600;
+    private const int Height = 200;
+    private const int Pad = 12;
+    private const int Axis = 18;
+
+    private double Max => Math.Max(1, Buckets.Max(b => b.Events));
+
+    private double X(int i) => Pad + (Width - 2.0 * Pad) * i / (Buckets.Count - 1);
+
+    private double Y(int value) => Height - Axis - (Height - Axis - 2.0 * Pad) * value / Max;
+
+    private string LinePath(Func<TimeBucketDto, int> value) =>
+        string.Join(" ", Buckets.Select((b, i) => $"{(i == 0 ? "M" : "L")}{N(X(i))},{N(Y(value(b)))}"));
+
+    private string AreaPath() =>
+        $"{LinePath(b => b.Events)} L{N(X(Buckets.Count - 1))},{Height - Axis} L{N(X(0))},{Height - Axis} Z";
+
+    // SVG needs '.' as decimal separator whatever the browser's language is.
+    private static string N(double value) => value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

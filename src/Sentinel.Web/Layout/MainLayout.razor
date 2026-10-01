@@ -1,0 +1,84 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AuthService Auth
+@inject LiveFeed Feed
+@inject NavigationManager Navigation
+
+<MudThemeProvider Theme="Theme.Dark" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="true" Style="border-bottom: 1px solid rgba(255,255,255,0.06)">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="() => _drawerOpen = !_drawerOpen" />
+        <div class="brand ml-2">
+            <span class="brand-mark"><MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" /></span>
+            <span>ZEROTRUST SENTINEL</span>
+        </div>
+        <MudSpacer />
+        <span class="mr-4" style="font-size: 0.8rem">
+            <span class="live-dot @(Feed.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected ? "on" : "off")"></span>
+            @(Feed.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected ? "Live" : "Feed offline")
+        </span>
+        <AuthorizeView>
+            <span class="mr-2" style="font-size: 0.85rem">@context.User.Identity?.Name</span>
+            <span class="sev sev-low mr-3">@context.User.FindFirst("role")?.Value</span>
+            <MudTooltip Text="Log out">
+                <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit" OnClick="LogoutAsync" />
+            </MudTooltip>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0" Variant="DrawerVariant.Responsive"
+               Style="border-right: 1px solid rgba(255,255,255,0.06)">
+        <MudNavMenu Class="mt-4">
+            <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+            <MudNavLink Href="alerts" Icon="@Icons.Material.Filled.NotificationsActive">Alerts</MudNavLink>
+            <MudNavLink Href="events" Icon="@Icons.Material.Filled.Timeline">Event stream</MudNavLink>
+            <MudNavLink Href="honeypot" Icon="@Icons.Material.Filled.BugReport">Honeypots</MudNavLink>
+            <AuthorizeView Roles="@Roles.Admin">
+                <MudDivider Class="my-2" />
+                <MudNavLink Href="audit" Icon="@Icons.Material.Filled.ReceiptLong">Audit log</MudNavLink>
+                <MudNavLink Href="users" Icon="@Icons.Material.Filled.ManageAccounts">Users &amp; roles</MudNavLink>
+            </AuthorizeView>
+        </MudNavMenu>
+        <div class="pa-4 mt-auto" style="font-size: 0.72rem; color: #5d6b8a">
+            Never trust, always verify.<br />Made by <strong>Talha Aker</strong>
+        </div>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="py-6">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Feed.StateChanged += OnFeedStateChanged;
+        Auth.LoggedOut += OnLoggedOut;
+        if ((await Auth.GetAuthenticationStateAsync()).User.Identity?.IsAuthenticated == true)
+            await Feed.StartAsync();
+    }
+
+    private void OnFeedStateChanged() => InvokeAsync(StateHasChanged);
+
+    private async void OnLoggedOut()
+    {
+        await Feed.StopAsync();
+        Navigation.NavigateTo("login", replace: true);
+    }
+
+    private Task LogoutAsync() => Auth.LogoutAsync();
+
+    public void Dispose()
+    {
+        Feed.StateChanged -= OnFeedStateChanged;
+        Auth.LoggedOut -= OnLoggedOut;
+    }
+}

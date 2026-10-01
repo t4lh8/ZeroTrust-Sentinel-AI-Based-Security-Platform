@@ -1,0 +1,40 @@
+@page "/audit"
+@attribute [Authorize(Roles = Roles.Admin)]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Audit log · ZeroTrust Sentinel</PageTitle>
+
+<MudText Typo="Typo.h5" Style="font-weight: 700">Audit log</MudText>
+<MudText Typo="Typo.body2" Class="mb-5" Style="color: #8b9bbf">
+    Append-only record of logins and every administrative action: who did what, when, and from where.
+</MudText>
+
+<MudPaper Class="panel" Elevation="0">
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Source IP</th><th>Result</th></tr></thead>
+        <tbody>
+            @foreach (var entry in _entries)
+            {
+                <tr @key="entry.Id">
+                    <td style="white-space: nowrap">@entry.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss")</td>
+                    <td><span class="mono">@entry.Actor</span></td>
+                    <td><span class="mono">@entry.Action</span></td>
+                    <td>@entry.Target</td>
+                    <td><span class="mono">@entry.SourceIp</span></td>
+                    <td><span style="color: @(entry.Success ? "#2ecc71" : "#ff4d6d")">@(entry.Success ? "Success" : "Failed")</span></td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+@code {
+    private List<AuditLogDto> _entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _entries = await Api.GetAsync<List<AuditLogDto>>("api/audit?take=300") ?? []; }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, MudBlazor.Severity.Error); }
+    }
+}

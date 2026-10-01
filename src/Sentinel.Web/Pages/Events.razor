@@ -1,0 +1,104 @@
+@page "/events"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject LiveFeed Feed
+@inject ISnackbar Snackbar
+
+<PageTitle>Event stream · ZeroTrust Sentinel</PageTitle>
+
+<div class="d-flex flex-wrap align-center gap-4 mb-5">
+    <div class="flex-grow-1">
+        <MudText Typo="Typo.h5" Style="font-weight: 700">Event stream</MudText>
+        <MudText Typo="Typo.body2" Style="color: #8b9bbf">Every login, API call and blocked request, scored by the anomaly models in real time.</MudText>
+    </div>
+    <MudSelect T="EventType?" Value="_type" ValueChanged="OnTypeChanged" Label="Type" Dense="true" Variant="Variant.Outlined" Style="min-width: 180px">
+        <MudSelectItem T="EventType?" Value="null">All</MudSelectItem>
+        @foreach (var t in Enum.GetValues<EventType>())
+        {
+            <MudSelectItem T="EventType?" Value="t">@t</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSwitch T="bool" @bind-Value="_paused" Label="Pause" Color="Color.Primary" />
+</div>
+
+<MudPaper Class="panel" Elevation="0">
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead>
+            <tr><th>Time</th><th>Type</th><th>Source IP</th><th>User</th><th>Request</th><th>Status</th><th>Anomaly score</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var ev in _events)
+            {
+                <tr @key="ev.Id">
+                    <td style="white-space: nowrap">@ev.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")</td>
+                    <td><span style="color: @TypeColor(ev.Type); font-weight: 600">@ev.Type</span></td>
+                    <td><span class="mono">@ev.SourceIp</span></td>
+                    <td><span class="mono">@(ev.Username ?? "–")</span></td>
+                    <td><span class="mono">@ev.Method @ev.Path</span></td>
+                    <td>@ev.StatusCode</td>
+                    <td>
+                        @if (ev.AnomalyScore is { } score)
+                        {
+                            <span class="score-track"><span class="score-fill" style="display:block; width:@((score * 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture))%; background:@ScoreColor(score)"></span></span>
+                            <span class="mono ml-2">@score.ToString("0.00")</span>
+                        }
+                        else
+                        {
+                            <span class="feed-meta">–</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+@code {
+    private const int MaxRows = 150;
+    private List<SecurityEventDto> _events = [];
+    private EventType? _type;
+    private bool _paused;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Feed.EventRecorded += OnEvent;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _events = await Api.GetAsync<List<SecurityEventDto>>($"api/events?take={MaxRows}" + (_type is null ? "" : $"&type={_type}")) ?? []; }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, MudBlazor.Severity.Error); }
+    }
+
+    private Task OnTypeChanged(EventType? value) { _type = value; return LoadAsync(); }
+
+    private void OnEvent(SecurityEventDto ev) => InvokeAsync(() =>
+    {
+        if (_paused || (_type is not null && ev.Type != _type)) return;
+        _events.Insert(0, ev);
+        if (_events.Count > MaxRows) _events.RemoveAt(_events.Count - 1);
+        StateHasChanged();
+    });
+
+    private static string TypeColor(EventType type) => type switch
+    {
+        EventType.LoginSuccess => "#2ecc71",
+        EventType.LoginFailure => "#ff8a3d",
+        EventType.AccessDenied => "#a970ff",
+        EventType.RateLimited => "#ffc53d",
+        EventType.HoneypotHit => "#ff4d6d",
+        _ => "#8b9bbf",
+    };
+
+    // Anomaly scores: ~0.35–0.6 is normal, values approaching 1 are increasingly anomalous.
+    private static string ScoreColor(double score) => score switch
+    {
+        >= 0.7 => "#ff4d6d",
+        >= 0.6 => "#ffc53d",
+        _ => "#2ecc71",
+    };
+
+    public void Dispose() => Feed.EventRecorded -= OnEvent;
+}

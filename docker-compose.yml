@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # The database is only reachable from the backend network, never from the host or internet.
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    build: .
+    image: zerotrust-sentinel:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      Database__Provider: Postgres
+      ConnectionStrings__Sentinel: Host=db;Database=sentinel;Username=sentinel;Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY in .env}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      Seed__AnalystPassword: ${ANALYST_PASSWORD:-}
+      Seed__ViewerPassword: ${VIEWER_PASSWORD:-}
+      Demo__Enabled: ${DEMO_MODE:-true}
+    networks: [backend, frontend]
+    # Container hardening: read-only filesystem, no Linux capabilities, no privilege escalation.
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  backend:
+    internal: true
+  frontend:
+
+volumes:
+  pgdata:
