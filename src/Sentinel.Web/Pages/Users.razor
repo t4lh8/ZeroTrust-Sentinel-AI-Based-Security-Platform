@@ -1,0 +1,102 @@
+@page "/users"
+@attribute [Authorize(Roles = Roles.Admin)]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Users · ZeroTrust Sentinel</PageTitle>
+
+<MudText Typo="Typo.h5" Style="font-weight: 700">Users &amp; roles</MudText>
+<MudText Typo="Typo.body2" Class="mb-5" Style="color: #8b9bbf">
+    Role-based access control. Deactivating a user revokes their active sessions immediately.
+</MudText>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="8">
+        <MudPaper Class="panel" Elevation="0">
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var user in _users)
+                    {
+                        <tr @key="user.Id">
+                            <td><span class="mono">@user.Username</span></td>
+                            <td>@user.Role</td>
+                            <td><span style="color: @(user.IsActive ? "#2ecc71" : "#ff4d6d")">@(user.IsActive ? "Active" : "Deactivated")</span></td>
+                            <td>@user.CreatedAtUtc.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            <td>
+                                @if (user.IsActive)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => DeactivateAsync(user)">Deactivate</MudButton>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Class="panel" Elevation="0">
+            <MudText Class="panel-title">Create user</MudText>
+            <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_password" Label="Password (min. 12 characters)" InputType="InputType.Password" Variant="Variant.Outlined" Class="mb-3" />
+            <MudSelect T="string" @bind-Value="_role" Label="Role" Variant="Variant.Outlined" Class="mb-4">
+                @foreach (var role in Roles.All)
+                {
+                    <MudSelectItem T="string" Value="role">@role</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="CreateAsync">Create user</MudButton>
+
+            <MudDivider Class="my-4" />
+            <div class="feed-meta">
+                <b>Admin</b>: everything · <b>Analyst</b>: handle alerts · <b>Viewer</b>: read-only dashboards
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<UserDto> _users = [];
+    private string _username = "";
+    private string _password = "";
+    private string _role = Roles.Viewer;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try { _users = await Api.GetAsync<List<UserDto>>("api/users") ?? []; }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, MudBlazor.Severity.Error); }
+    }
+
+    private async Task CreateAsync()
+    {
+        try
+        {
+            await Api.PostAsync<UserDto>("api/users", new CreateUserRequest(_username, _password, _role));
+            Snackbar.Add($"User '{_username}' created.", MudBlazor.Severity.Success);
+            _username = _password = "";
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Snackbar.Add(ex.Message, MudBlazor.Severity.Error);
+        }
+    }
+
+    private async Task DeactivateAsync(UserDto user)
+    {
+        try
+        {
+            await Api.PostAsync<UserDto>($"api/users/{user.Id}/deactivate");
+            Snackbar.Add($"'{user.Username}' deactivated. Their tokens no longer work.", MudBlazor.Severity.Success);
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Snackbar.Add(ex.Message, MudBlazor.Severity.Error);
+        }
+    }
+}

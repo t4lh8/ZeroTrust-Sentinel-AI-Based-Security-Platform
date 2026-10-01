@@ -1,0 +1,19 @@
+<MudPaper Class="panel" Elevation="0">
+    <div class="stat">
+        <div class="stat-icon" style="background: @(Accent)22; color: @Accent">
+            <MudIcon Icon="@Icon" />
+        </div>
+        <div>
+            <div class="stat-value" style="color: @(Highlight ? Accent : "inherit")">@Value.ToString("N0")</div>
+            <div class="stat-label">@Label</div>
+        </div>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public int Value { get; set; }
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter] public string Accent { get; set; } = "#4f8cff";
+    [Parameter] public bool Highlight { get; set; }
+}
