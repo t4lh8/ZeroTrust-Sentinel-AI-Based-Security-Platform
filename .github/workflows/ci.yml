@@ -1,6 +1,9 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch: # allows running CI manually from the Actions tab
 
 permissions:
   contents: read
