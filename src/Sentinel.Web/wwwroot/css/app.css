@@ -1,0 +1,104 @@
+:root {
+    --sev-critical: #ff4d6d;
+    --sev-high: #ff8a3d;
+    --sev-medium: #ffc53d;
+    --sev-low: #4f8cff;
+    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+
+html, body {
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0a0f1d;
+}
+
+.mono { font-family: var(--mono); font-size: 0.85em; }
+
+/* ---------- Boot screen (before WebAssembly loads) ---------- */
+.boot {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: #8b9bbf;
+    background: #0a0f1d;
+}
+.boot-shield { font-size: 48px; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.12); opacity: 0.7; } }
+
+/* ---------- Layout ---------- */
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.04em; }
+.brand-mark {
+    width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px;
+    background: linear-gradient(135deg, #4f8cff, #22d3ee); color: #06101f;
+}
+.panel { padding: 18px; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px !important; height: 100%; }
+.panel-title {
+    font-size: 0.75rem !important; font-weight: 600 !important; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #8b9bbf; margin-bottom: 12px !important;
+}
+
+/* ---------- Stat cards ---------- */
+.stat { display: flex; align-items: center; gap: 14px; }
+.stat-icon {
+    width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0;
+}
+.stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+.stat-label { font-size: 0.78rem; color: #8b9bbf; }
+
+/* ---------- Severity ---------- */
+.sev {
+    display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; border: 1px solid currentColor; white-space: nowrap;
+}
+.sev-critical { color: var(--sev-critical); background: rgba(255, 77, 109, 0.12); }
+.sev-high { color: var(--sev-high); background: rgba(255, 138, 61, 0.12); }
+.sev-medium { color: var(--sev-medium); background: rgba(255, 197, 61, 0.1); }
+.sev-low { color: var(--sev-low); background: rgba(79, 140, 255, 0.12); }
+.sev-bar-critical { border-left: 3px solid var(--sev-critical); }
+.sev-bar-high { border-left: 3px solid var(--sev-high); }
+.sev-bar-medium { border-left: 3px solid var(--sev-medium); }
+.sev-bar-low { border-left: 3px solid var(--sev-low); }
+
+.status-open { color: #ff8a3d; }
+.status-acknowledged { color: #ffc53d; }
+.status-resolved { color: #2ecc71; }
+
+/* ---------- Live alert feed ---------- */
+.feed-item {
+    padding: 10px 12px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.025);
+    animation: slide-in 0.4s ease-out;
+}
+@keyframes slide-in { from { opacity: 0; transform: translateY(-6px); } }
+.feed-meta { font-size: 0.75rem; color: #8b9bbf; }
+.feed-title { font-weight: 600; margin: 3px 0; }
+
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.live-dot.on { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; animation: pulse 1.6s infinite; }
+.live-dot.off { background: #ff4d6d; }
+
+/* ---------- Tables ---------- */
+.mud-simple-table table td, .mud-simple-table table th { font-size: 0.82rem; }
+.row-clickable { cursor: pointer; }
+.score-track { width: 70px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); display: inline-block; vertical-align: middle; }
+.score-fill { height: 100%; border-radius: 3px; }
+.desc-row td { background: rgba(255, 255, 255, 0.02); color: #c5d0ea; white-space: normal !important; }
+
+/* ---------- Bars ---------- */
+.hbar { display: grid; grid-template-columns: 1fr 2fr 36px; gap: 10px; align-items: center; margin: 6px 0; font-size: 0.82rem; }
+.hbar-track { height: 6px; background: rgba(255, 255, 255, 0.06); border-radius: 3px; overflow: hidden; }
+.hbar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4f8cff, #22d3ee); }
+
+/* ---------- Login ---------- */
+.login-wrap {
+    min-height: 100vh; display: grid; place-items: center; padding: 16px;
+    background: radial-gradient(ellipse at top, #13234a 0%, #0a0f1d 60%);
+}
+.login-card { width: 100%; max-width: 400px; padding: 32px; border-radius: 16px !important; }
+
+#blazor-error-ui {
+    background: #ff4d6d; color: #fff; bottom: 0; display: none; left: 0; padding: 0.6rem 1.25rem; position: fixed; width: 100%; z-index: 9999;
+}
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 0.75rem; top: 0.5rem; }
+#blazor-error-ui a { color: #fff; }

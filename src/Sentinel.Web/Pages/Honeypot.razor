@@ -1,0 +1,78 @@
+@page "/honeypot"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject LiveFeed Feed
+@inject ISnackbar Snackbar
+
+<PageTitle>Honeypots · ZeroTrust Sentinel</PageTitle>
+
+<MudText Typo="Typo.h5" Style="font-weight: 700">Honeypots &amp; honeytokens</MudText>
+<MudText Typo="Typo.body2" Class="mb-5" Style="color: #8b9bbf">
+    Trap URLs that no legitimate user ever visits. Any request to them is logged and raises a critical alert.
+</MudText>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="4">
+        <MudPaper Class="panel" Elevation="0">
+            <MudText Class="panel-title">Active traps</MudText>
+            @foreach (var trap in HoneypotTraps.Paths)
+            {
+                var hits = _hits.Count(h => h.Path.StartsWith(trap));
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <span class="mono">@trap</span>
+                    <span class="sev @(hits > 0 ? "sev-critical" : "sev-low")">@hits hits</span>
+                </div>
+            }
+            <MudDivider Class="my-4" />
+            <MudText Class="panel-title">Honeytokens</MudText>
+            <div class="feed-meta">
+                The fake <span class="mono">/.env</span> file contains credentials for accounts that do not exist.
+                Anyone trying to log in with them has harvested data from a trap. That raises a <SeverityBadge Value="AlertSeverity.Critical" /> alert.
+            </div>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        <MudPaper Class="panel" Elevation="0">
+            <MudText Class="panel-title">Recent honeypot hits</MudText>
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Time</th><th>Source IP</th><th>Request</th></tr></thead>
+                <tbody>
+                    @if (_hits.Count == 0)
+                    {
+                        <tr><td colspan="3" class="feed-meta">No hits yet. Try opening <span class="mono">/.env</span> in a new tab.</td></tr>
+                    }
+                    @foreach (var hit in _hits)
+                    {
+                        <tr @key="hit.Id">
+                            <td>@hit.TimestampUtc.ToLocalTime().ToString("dd.MM HH:mm:ss")</td>
+                            <td><span class="mono">@hit.SourceIp</span></td>
+                            <td><span class="mono">@hit.Method @hit.Path</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<SecurityEventDto> _hits = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Feed.EventRecorded += OnEvent;
+        try { _hits = await Api.GetAsync<List<SecurityEventDto>>($"api/events?type={EventType.HoneypotHit}&take=200") ?? []; }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, MudBlazor.Severity.Error); }
+    }
+
+    private void OnEvent(SecurityEventDto ev) => InvokeAsync(() =>
+    {
+        if (ev.Type != EventType.HoneypotHit) return;
+        _hits.Insert(0, ev);
+        StateHasChanged();
+    });
+
+    public void Dispose() => Feed.EventRecorded -= OnEvent;
+}

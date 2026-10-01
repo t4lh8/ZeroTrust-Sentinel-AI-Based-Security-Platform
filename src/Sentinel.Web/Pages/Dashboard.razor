@@ -1,0 +1,168 @@
+@page "/"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject LiveFeed Feed
+@inject ISnackbar Snackbar
+
+<PageTitle>Dashboard · ZeroTrust Sentinel</PageTitle>
+
+<div class="d-flex align-center mb-5">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700">Security overview</MudText>
+        <MudText Typo="Typo.body2" Style="color: #8b9bbf">Last hour of activity · updates live</MudText>
+    </div>
+</div>
+
+@if (_overview is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="4" lg="2"><StatCard Label="Events (1 h)" Value="_overview.EventsLastHour" Icon="@Icons.Material.Filled.Insights" /></MudItem>
+        <MudItem xs="12" sm="6" md="4" lg="2"><StatCard Label="Failed logins (1 h)" Value="_overview.FailedLoginsLastHour" Icon="@Icons.Material.Filled.NoAccounts" Accent="#ff8a3d" /></MudItem>
+        <MudItem xs="12" sm="6" md="4" lg="2"><StatCard Label="Blocked requests (1 h)" Value="_overview.BlockedLastHour" Icon="@Icons.Material.Filled.Block" Accent="#a970ff" /></MudItem>
+        <MudItem xs="12" sm="6" md="4" lg="2"><StatCard Label="Honeypot hits (24 h)" Value="_overview.HoneypotHitsLast24h" Icon="@Icons.Material.Filled.BugReport" Accent="#22d3ee" /></MudItem>
+        <MudItem xs="12" sm="6" md="4" lg="2"><StatCard Label="Open alerts" Value="_overview.OpenAlerts" Icon="@Icons.Material.Filled.NotificationsActive" Accent="#ffc53d" Highlight="_overview.OpenAlerts > 0" /></MudItem>
+        <MudItem xs="12" sm="6" md="4" lg="2"><StatCard Label="Critical open" Value="_overview.CriticalOpenAlerts" Icon="@Icons.Material.Filled.Warning" Accent="#ff4d6d" Highlight="_overview.CriticalOpenAlerts > 0" /></MudItem>
+
+        <MudItem xs="12" lg="8">
+            <MudPaper Class="panel" Elevation="0">
+                <MudText Class="panel-title">Activity timeline</MudText>
+                <TimelineChart Buckets="_overview.Timeline" />
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="4">
+            <MudPaper Class="panel" Elevation="0">
+                <MudText Class="panel-title">AI anomaly detection</MudText>
+                @foreach (var model in _overview.Models)
+                {
+                    <div class="d-flex align-center justify-space-between mb-3">
+                        <div>
+                            <div style="font-weight: 600">@model.Name</div>
+                            <div class="feed-meta">
+                                Isolation Forest · @(model.Trained ? $"{model.TrainingSamples:N0} samples · trained {model.TrainedAtUtc?.ToLocalTime():HH:mm}" : "collecting baseline data…")
+                            </div>
+                        </div>
+                        <span class="sev @(model.Trained ? "sev-low" : "sev-medium")">@(model.Trained ? "Active" : "Learning")</span>
+                    </div>
+                }
+                <MudDivider Class="my-3" />
+                <MudText Class="panel-title">Top suspicious sources (1 h)</MudText>
+                @if (_overview.TopSourceIps.Count == 0)
+                {
+                    <div class="feed-meta">No suspicious sources.</div>
+                }
+                @foreach (var ip in _overview.TopSourceIps)
+                {
+                    <div class="hbar">
+                        <span class="mono">@ip.Label</span>
+                        <div class="hbar-track"><div class="hbar-fill" style="width:@(Percent(ip.Count, _overview.TopSourceIps[0].Count))%"></div></div>
+                        <span style="text-align:right">@ip.Count</span>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="8">
+            <MudPaper Class="panel" Elevation="0">
+                <div class="d-flex justify-space-between align-center">
+                    <MudText Class="panel-title">Live alerts</MudText>
+                    <MudButton Href="alerts" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary">View all</MudButton>
+                </div>
+                @if (_alerts.Count == 0)
+                {
+                    <div class="feed-meta">No alerts yet. Detection is running.</div>
+                }
+                @foreach (var alert in _alerts)
+                {
+                    <div class="feed-item sev-bar-@alert.Severity.ToString().ToLowerInvariant()" @key="alert.Id">
+                        <div class="d-flex justify-space-between align-center">
+                            <div class="d-flex align-center gap-2">
+                                <SeverityBadge Value="alert.Severity" />
+                                <span class="feed-meta">@alert.Category</span>
+                            </div>
+                            <span class="feed-meta">@alert.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                        </div>
+                        <div class="feed-title">@alert.Title</div>
+                        <div class="feed-meta">
+                            source <span class="mono">@alert.SourceIp</span>
+                            @if (alert.Username is not null) { <span> · user <span class="mono">@alert.Username</span></span> }
+                            · risk @alert.RiskScore.ToString("0")
+                        </div>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" lg="4">
+            <MudPaper Class="panel" Elevation="0">
+                <MudText Class="panel-title">Alerts by detection (24 h)</MudText>
+                @if (_overview.AlertsByCategory.Count == 0)
+                {
+                    <div class="feed-meta">Nothing detected yet.</div>
+                }
+                @foreach (var category in _overview.AlertsByCategory)
+                {
+                    <div class="hbar">
+                        <span>@category.Label</span>
+                        <div class="hbar-track"><div class="hbar-fill" style="width:@(Percent(category.Count, _overview.AlertsByCategory[0].Count))%; background: linear-gradient(90deg, #ff4d6d, #ff8a3d)"></div></div>
+                        <span style="text-align:right">@category.Count</span>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private OverviewDto? _overview;
+    private List<AlertDto> _alerts = [];
+    private Timer? _timer;
+    private DateTime _lastRefresh;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Feed.AlertRaised += OnAlertRaised;
+        await RefreshAsync();
+        _alerts = (await SafeGet<List<AlertDto>>("api/alerts?take=8")) ?? [];
+        _timer = new Timer(_ => InvokeAsync(RefreshAsync), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task RefreshAsync()
+    {
+        _lastRefresh = DateTime.UtcNow;
+        _overview = await SafeGet<OverviewDto>("api/overview") ?? _overview;
+        StateHasChanged();
+    }
+
+    private void OnAlertRaised(AlertDto alert) => InvokeAsync(async () =>
+    {
+        _alerts.Insert(0, alert);
+        if (_alerts.Count > 8) _alerts.RemoveAt(_alerts.Count - 1);
+        if (alert.Severity >= AlertSeverity.High)
+            Snackbar.Add($"{alert.Severity}: {alert.Title}", alert.Severity == AlertSeverity.Critical ? MudBlazor.Severity.Error : MudBlazor.Severity.Warning);
+
+        // Refresh the counters, at most every 2 seconds during an attack burst.
+        if (DateTime.UtcNow - _lastRefresh > TimeSpan.FromSeconds(2)) await RefreshAsync();
+        else StateHasChanged();
+    });
+
+    private async Task<T?> SafeGet<T>(string url)
+    {
+        try { return await Api.GetAsync<T>(url); }
+        catch (ApiException) { return default; }
+        catch (HttpRequestException) { return default; }
+    }
+
+    private static double Percent(int value, int max) => max == 0 ? 0 : Math.Round(100.0 * value / max);
+
+    public void Dispose()
+    {
+        Feed.AlertRaised -= OnAlertRaised;
+        _timer?.Dispose();
+    }
+}

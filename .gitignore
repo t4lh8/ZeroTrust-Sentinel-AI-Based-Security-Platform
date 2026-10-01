@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+TestResults/
+
+# Local databases and secrets
+*.db
+*.db-shm
+*.db-wal
+.env

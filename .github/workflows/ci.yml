@@ -1,0 +1,84 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build, test & dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+      - name: Fail on known-vulnerable NuGet packages
+        run: |
+          dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then exit 1; fi
+
+  container:
+    name: Docker image scan & end-to-end smoke test
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t zerotrust-sentinel:latest .
+
+      - name: Scan image with Trivy (fail on fixable critical CVEs)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+            image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress zerotrust-sentinel:latest
+
+      - name: Start the stack with random secrets
+        run: |
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "JWT_KEY=$(openssl rand -hex 32)"
+            echo "ADMIN_PASSWORD=Ci-Admin-$(openssl rand -hex 8)"
+            echo "DEMO_MODE=true"
+          } > .env
+          docker compose up -d
+
+      - name: Smoke test the running API
+        run: |
+          for i in $(seq 1 60); do curl -sf http://localhost:8080/health && break; sleep 2; done
+          curl -sf http://localhost:8080/health
+
+          # Unauthenticated API access is refused
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/overview)" = "401"
+
+          # Admin can log in and read the dashboard data
+          ADMIN_PASSWORD=$(grep ADMIN_PASSWORD .env | cut -d= -f2)
+          TOKEN=$(curl -sf -H 'Content-Type: application/json' \
+            -d "{\"username\":\"admin\",\"password\":\"$ADMIN_PASSWORD\"}" \
+            http://localhost:8080/api/auth/login | jq -r .token)
+          curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/overview | jq '{EventsLastHour: .eventsLastHour, models: [.models[] | {name, trained}]}'
+
+          # Honeypot answers with bait
+          curl -sf http://localhost:8080/.env | grep -q ADMIN_PASSWORD
+
+          # The dashboard is served
+          curl -sf http://localhost:8080/ | grep -q "ZeroTrust Sentinel"
+
+      - name: Show logs
+        if: always()
+        run: docker compose logs --tail 80 api
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

@@ -1,0 +1,136 @@
+@page "/alerts"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject LiveFeed Feed
+@inject ISnackbar Snackbar
+
+<PageTitle>Alerts · ZeroTrust Sentinel</PageTitle>
+
+<div class="d-flex flex-wrap align-center gap-4 mb-5">
+    <div class="flex-grow-1">
+        <MudText Typo="Typo.h5" Style="font-weight: 700">Alerts</MudText>
+        <MudText Typo="Typo.body2" Style="color: #8b9bbf">Click an alert to see why it was raised.</MudText>
+    </div>
+    <MudSelect T="AlertStatus?" Value="_status" ValueChanged="OnStatusChanged" Label="Status" Dense="true" Variant="Variant.Outlined" Style="min-width: 160px">
+        <MudSelectItem T="AlertStatus?" Value="null">All</MudSelectItem>
+        @foreach (var s in Enum.GetValues<AlertStatus>())
+        {
+            <MudSelectItem T="AlertStatus?" Value="s">@s</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSelect T="AlertSeverity?" Value="_severity" ValueChanged="OnSeverityChanged" Label="Severity" Dense="true" Variant="Variant.Outlined" Style="min-width: 160px">
+        <MudSelectItem T="AlertSeverity?" Value="null">All</MudSelectItem>
+        @foreach (var s in Enum.GetValues<AlertSeverity>().Reverse())
+        {
+            <MudSelectItem T="AlertSeverity?" Value="s">@s</MudSelectItem>
+        }
+    </MudSelect>
+</div>
+
+<MudPaper Class="panel" Elevation="0">
+    <MudSimpleTable Dense="true" Hover="true" FixedHeader="true">
+        <thead>
+            <tr><th>Time</th><th>Severity</th><th>Detection</th><th>Alert</th><th>Source</th><th>Risk</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+            @if (_alerts.Count == 0)
+            {
+                <tr><td colspan="8" class="feed-meta">No alerts match the filter.</td></tr>
+            }
+            @foreach (var alert in _alerts)
+            {
+                <tr class="row-clickable" @key="alert.Id" @onclick="() => Toggle(alert.Id)">
+                    <td style="white-space: nowrap">@alert.CreatedAtUtc.ToLocalTime().ToString("dd.MM HH:mm:ss")</td>
+                    <td><SeverityBadge Value="alert.Severity" /></td>
+                    <td>@alert.Category</td>
+                    <td style="font-weight: 500">@alert.Title</td>
+                    <td><span class="mono">@alert.SourceIp</span></td>
+                    <td>@alert.RiskScore.ToString("0")</td>
+                    <td><span class="status-@alert.Status.ToString().ToLowerInvariant()">@alert.Status</span>
+                        @if (alert.HandledBy is not null) { <div class="feed-meta">by @alert.HandledBy</div> }
+                    </td>
+                    <td style="white-space: nowrap" @onclick:stopPropagation="true">
+                        <AuthorizeView Roles="@($"{Roles.Admin},{Roles.Analyst}")">
+                            @if (alert.Status == AlertStatus.Open)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" OnClick='() => SetStatus(alert, "acknowledge")'>Ack</MudButton>
+                            }
+                            @if (alert.Status != AlertStatus.Resolved)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" Class="ml-1" OnClick='() => SetStatus(alert, "resolve")'>Resolve</MudButton>
+                            }
+                        </AuthorizeView>
+                    </td>
+                </tr>
+                @if (_expanded.Contains(alert.Id))
+                {
+                    <tr class="desc-row">
+                        <td colspan="8">
+                            @alert.Description
+                            @if (alert.Username is not null) { <div class="feed-meta mt-1">User: <span class="mono">@alert.Username</span></div> }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+@code {
+    private List<AlertDto> _alerts = [];
+    private readonly HashSet<Guid> _expanded = [];
+    private AlertStatus? _status = AlertStatus.Open;
+    private AlertSeverity? _severity;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Feed.AlertRaised += OnAlertRaised;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var url = "api/alerts?take=200";
+        if (_status is not null) url += $"&status={_status}";
+        if (_severity is not null) url += $"&severity={_severity}";
+        try { _alerts = await Api.GetAsync<List<AlertDto>>(url) ?? []; }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, MudBlazor.Severity.Error); }
+    }
+
+    private Task OnStatusChanged(AlertStatus? value) { _status = value; return LoadAsync(); }
+
+    private Task OnSeverityChanged(AlertSeverity? value) { _severity = value; return LoadAsync(); }
+
+    private void Toggle(Guid id)
+    {
+        if (!_expanded.Remove(id)) _expanded.Add(id);
+    }
+
+    private async Task SetStatus(AlertDto alert, string action)
+    {
+        try
+        {
+            var updated = await Api.PostAsync<AlertDto>($"api/alerts/{alert.Id}/{action}");
+            var index = _alerts.FindIndex(a => a.Id == alert.Id);
+            if (updated is not null && index >= 0) _alerts[index] = updated;
+            if (_status is not null && updated?.Status != _status) _alerts.RemoveAt(index);
+            Snackbar.Add($"Alert {updated?.Status.ToString().ToLowerInvariant()}. The action was written to the audit log.", MudBlazor.Severity.Success);
+        }
+        catch (ApiException ex)
+        {
+            Snackbar.Add(ex.Message, MudBlazor.Severity.Error);
+        }
+    }
+
+    private void OnAlertRaised(AlertDto alert) => InvokeAsync(() =>
+    {
+        if ((_status is null || _status == alert.Status) && (_severity is null || _severity == alert.Severity))
+        {
+            _alerts.Insert(0, alert);
+            StateHasChanged();
+        }
+    });
+
+    public void Dispose() => Feed.AlertRaised -= OnAlertRaised;
+}

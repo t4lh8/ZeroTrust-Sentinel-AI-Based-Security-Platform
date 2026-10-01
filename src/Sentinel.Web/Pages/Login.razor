@@ -1,0 +1,63 @@
+@page "/login"
+@layout EmptyLayout
+@inject AuthService Auth
+@inject LiveFeed Feed
+@inject NavigationManager Navigation
+
+<PageTitle>Sign in · ZeroTrust Sentinel</PageTitle>
+
+<div class="login-wrap">
+    <MudPaper Class="login-card" Elevation="8">
+        <div class="brand mb-1" style="font-size: 1.1rem">
+            <span class="brand-mark"><MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" /></span>
+            <span>ZEROTRUST SENTINEL</span>
+        </div>
+        <MudText Typo="Typo.body2" Class="mb-6" Style="color: #8b9bbf">Security monitoring &amp; anomaly detection</MudText>
+
+        <EditForm Model="_form" OnValidSubmit="SubmitAsync">
+            <MudTextField @bind-Value="_form.Username" Label="Username" Variant="Variant.Outlined" Class="mb-4"
+                          AdornmentIcon="@Icons.Material.Filled.Person" Adornment="Adornment.Start" autocomplete="username" />
+            <MudTextField @bind-Value="_form.Password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password"
+                          AdornmentIcon="@Icons.Material.Filled.Lock" Adornment="Adornment.Start" autocomplete="current-password" />
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="MudBlazor.Severity.Error" Dense="true" Class="mt-4">@_error</MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       Size="Size.Large" Class="mt-6" Disabled="_busy">
+                @(_busy ? "Verifying…" : "Sign in")
+            </MudButton>
+        </EditForm>
+
+        <MudText Typo="Typo.caption" Class="mt-6 d-block" Style="color: #5d6b8a">
+            Every attempt is rate limited, audited and analysed for anomalies.
+        </MudText>
+    </MudPaper>
+</div>
+
+@code {
+    private readonly LoginForm _form = new();
+    private string? _error;
+    private bool _busy;
+
+    private sealed class LoginForm
+    {
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = await Auth.LoginAsync(_form.Username, _form.Password);
+        _busy = false;
+
+        if (_error is null)
+        {
+            await Feed.StartAsync();
+            Navigation.NavigateTo("");
+        }
+    }
+}

@@ -1,0 +1,5 @@
+<span class="sev sev-@Value.ToString().ToLowerInvariant()">@Value</span>
+
+@code {
+    [Parameter] public Sentinel.Shared.Severity Value { get; set; }
+}
