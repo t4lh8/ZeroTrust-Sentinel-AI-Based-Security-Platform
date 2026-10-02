@@ -50,7 +50,7 @@ public sealed class AnomalyModel(string name, string[] featureNames, double thre
         return Math.Max(s.Forest.Score(features), NoveltyScore(MaxZ(s, features)));
     }
 
-    /// <summary>Maps the largest z-score onto the same 0–1 scale: z ≤ 2 is ordinary, z = 6 gives 0.7.</summary>
+    /// <summary>Maps the largest z-score onto the same 0-1 scale: z ≤ 2 is ordinary, z = 6 gives 0.7.</summary>
     public static double NoveltyScore(double z) => z <= 2 ? 0 : Math.Min(0.95, 0.5 + 0.05 * (z - 2));
 
     private static double Z(Snapshot s, double[] features, int f) =>

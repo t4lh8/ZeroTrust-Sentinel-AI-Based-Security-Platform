@@ -84,7 +84,7 @@ public sealed class ActivityTracker
     private bool IsNewIp(string? user, string ip) =>
         user is not null && _baselines.TryGetValue(user, out var b) && b.KnownIps.Count > 0 && !b.KnownIps.Contains(ip);
 
-    /// <summary>Circular distance (0–12 h) between now and the user's average login hour.</summary>
+    /// <summary>Circular distance (0-12 h) between now and the user's average login hour.</summary>
     private double HoursFromUsual(string? user, DateTime now)
     {
         if (user is null || !_baselines.TryGetValue(user, out var b) || b.LoginHours.Count < 5) return 0;
