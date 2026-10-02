@@ -34,7 +34,7 @@
                     <td style="white-space: nowrap">@ev.TimestampUtc.ToLocalTime().ToString("HH:mm:ss")</td>
                     <td><span style="color: @TypeColor(ev.Type); font-weight: 600">@ev.Type</span></td>
                     <td><span class="mono">@ev.SourceIp</span></td>
-                    <td><span class="mono">@(ev.Username ?? "–")</span></td>
+                    <td><span class="mono">@(ev.Username ?? "-")</span></td>
                     <td><span class="mono">@ev.Method @ev.Path</span></td>
                     <td>@ev.StatusCode</td>
                     <td>
@@ -45,7 +45,7 @@
                         }
                         else
                         {
-                            <span class="feed-meta">–</span>
+                            <span class="feed-meta">-</span>
                         }
                     </td>
                 </tr>
@@ -92,7 +92,7 @@
         _ => "#8b9bbf",
     };
 
-    // Anomaly scores: ~0.35–0.6 is normal, values approaching 1 are increasingly anomalous.
+    // Anomaly scores: ~0.35-0.6 is normal, values approaching 1 are increasingly anomalous.
     private static string ScoreColor(double score) => score switch
     {
         >= 0.7 => "#ff4d6d",

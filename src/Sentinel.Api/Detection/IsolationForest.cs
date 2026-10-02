@@ -95,7 +95,7 @@ public sealed class IsolationForest
     {
         if (n <= 1) return 0;
         if (n == 2) return 1;
-        var harmonic = Math.Log(n - 1) + 0.5772156649; // Euler–Mascheroni constant
+        var harmonic = Math.Log(n - 1) + 0.5772156649; // Euler-Mascheroni constant
         return 2 * harmonic - 2.0 * (n - 1) / n;
     }
 
